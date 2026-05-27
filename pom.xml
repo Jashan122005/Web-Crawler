@@ -1,0 +1,106 @@
+package com.udacity.webcrawler.profiler;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
+import java.lang.reflect.InvocationTargetException;
+
+/**
+ * A method interceptor that records execution time
+ * for methods annotated with @Profiled.
+ */
+final class ProfilingMethodInterceptor
+        implements InvocationHandler {
+
+    private final Clock clock;
+
+    private final Object delegate;
+
+    private final ProfilingState state;
+
+    /*
+     * CONSTRUCTOR
+     */
+    ProfilingMethodInterceptor(
+            ProfilingState state,
+            Clock clock,
+            Object delegate) {
+
+        this.state =
+                Objects.requireNonNull(state);
+
+        this.clock =
+                Objects.requireNonNull(clock);
+
+        this.delegate =
+                Objects.requireNonNull(delegate);
+    }
+
+    @Override
+    public Object invoke(
+            Object proxy,
+            Method method,
+            Object[] args)
+            throws Throwable {
+
+        /*
+         * CHECK IF METHOD IS PROFILED
+         */
+        boolean isProfiled =
+                method.isAnnotationPresent(
+                        Profiled.class);
+
+        /*
+         * NORMAL METHOD
+         */
+        if (!isProfiled) {
+
+            try {
+
+                return method.invoke(
+                        delegate,
+                        args);
+
+            } catch (InvocationTargetException e) {
+
+                throw e.getCause();
+            }
+        }
+
+        /*
+         * PROFILED METHOD
+         */
+        Instant start = clock.instant();
+
+        try {
+
+            return method.invoke(
+                    delegate,
+                    args);
+
+        } catch (InvocationTargetException e) {
+
+            /*
+             * VERY IMPORTANT FIX
+             */
+            throw e.getCause();
+
+        } finally {
+
+            Instant end = clock.instant();
+
+            Duration elapsed =
+                    Duration.between(
+                            start,
+                            end);
+
+            state.record(
+                    delegate.getClass(),
+                    method,
+                    elapsed);
+        }
+    }
+}
